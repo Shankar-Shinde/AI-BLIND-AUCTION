@@ -2,57 +2,77 @@ from flask import Flask, request, jsonify, send_from_directory
 import uuid
 from flask_cors import CORS
 import os
+from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 CORS(app)
 
-# Simple in-memory storage for auctions
-auctions = {}
+# Database configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///auctions.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+# Models
+class Auction(db.Model):
+    id = db.Column(db.String(36), primary_key=True)
+    item = db.Column(db.String(100), nullable=False)
+    status = db.Column(db.String(10), default='open')
+    bids = db.relationship('Bid', backref='auction', lazy=True)
+
+class Bid(db.Model):
+    id = db.Column(db.String(36), primary_key=True)
+    auction_id = db.Column(db.String(36), db.ForeignKey('auction.id'), nullable=False)
+    bidder = db.Column(db.String(50), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+
+# Create tables
+with app.app_context():
+    db.create_all()
 
 @app.route('/create_auction', methods=['POST'])
 def create_auction():
     data = request.json
     auction_id = str(uuid.uuid4())
-    auctions[auction_id] = {
-        'item': data.get('item'),
-        'bids': [],
-        'status': 'open'
-    }
+    new_auction = Auction(id=auction_id, item=data.get('item'))
+    db.session.add(new_auction)
+    db.session.commit()
     return jsonify({'auction_id': auction_id}), 201
 
 @app.route('/place_bid/<auction_id>', methods=['POST'])
 def place_bid(auction_id):
-    if auction_id not in auctions:
+    auction = Auction.query.get(auction_id)
+    if not auction:
         return jsonify({'error': 'Auction not found'}), 404
-    if auctions[auction_id]['status'] != 'open':
+    if auction.status != 'open':
         return jsonify({'error': 'Auction closed'}), 400
     data = request.json
-    # blind bid: only store encrypted/blob value in real system; here we store as-is
-    auctions[auction_id]['bids'].append({
-        'bid_id': str(uuid.uuid4()),
-        'bidder': data.get('bidder'),
-        'amount': data.get('amount')
-    })
+    bid_id = str(uuid.uuid4())
+    new_bid = Bid(id=bid_id, auction_id=auction_id, bidder=data.get('bidder'), amount=data.get('amount'))
+    db.session.add(new_bid)
+    db.session.commit()
     return jsonify({'status': 'bid placed'}), 200
 
 @app.route('/close_auction/<auction_id>', methods=['POST'])
 def close_auction(auction_id):
-    if auction_id not in auctions:
+    auction = Auction.query.get(auction_id)
+    if not auction:
         return jsonify({'error': 'Auction not found'}), 404
-    auctions[auction_id]['status'] = 'closed'
+    auction.status = 'closed'
+    db.session.commit()
     return jsonify({'status': 'closed'}), 200
 
 @app.route('/reveal_winner/<auction_id>', methods=['GET'])
 def reveal_winner(auction_id):
-    if auction_id not in auctions:
+    auction = Auction.query.get(auction_id)
+    if not auction:
         return jsonify({'error': 'Auction not found'}), 404
-    if auctions[auction_id]['status'] != 'closed':
+    if auction.status != 'closed':
         return jsonify({'error': 'Auction not closed yet'}), 400
-    bids = auctions[auction_id]['bids']
+    bids = Bid.query.filter_by(auction_id=auction_id).all()
     if not bids:
         return jsonify({'winner': None}), 200
-    winner = max(bids, key=lambda b: b['amount'])
-    return jsonify({'winner': winner}), 200
+    winner = max(bids, key=lambda b: b.amount)
+    return jsonify({'winner': {'bidder': winner.bidder, 'amount': winner.amount}}), 200
 
 @app.route('/suggest_bid', methods=['POST'])
 def suggest_bid():
