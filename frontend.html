@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Blind Auction</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+<div class="container py-5">
+    <h1 class="mb-4">AI-Powered Blind Auction</h1>
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Create Auction</h5>
+            <input id="item" class="form-control mb-2" placeholder="Item name">
+            <button onclick="createAuction()" class="btn btn-primary">Create</button>
+            <div id="auctionId" class="mt-2 text-success"></div>
+        </div>
+    </div>
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Place Bid</h5>
+            <input id="bidAuctionId" class="form-control mb-2" placeholder="Auction ID">
+            <input id="bidder" class="form-control mb-2" placeholder="Your name">
+            <input id="amount" class="form-control mb-2" placeholder="Bid amount" type="number">
+            <button onclick="placeBid()" class="btn btn-success">Bid</button>
+            <div id="bidStatus" class="mt-2 text-info"></div>
+        </div>
+    </div>
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">AI Bid Suggestion</h5>
+            <input id="suggestItem" class="form-control mb-2" placeholder="Item name for suggestion">
+            <button onclick="suggestBid()" class="btn btn-info">Get AI Suggestion</button>
+            <div id="suggestion" class="mt-2 text-primary"></div>
+        </div>
+    </div>
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Reveal Winner</h5>
+            <input id="revealAuctionId" class="form-control mb-2" placeholder="Auction ID">
+            <button onclick="revealWinner()" class="btn btn-dark">Reveal</button>
+            <div id="winner" class="mt-2 text-success"></div>
+        </div>
+    </div>
+</div>
+<script>
+const api = 'http://127.0.0.1:5000';
+function createAuction() {
+    fetch(api + '/create_auction', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({item: document.getElementById('item').value})
+    })
+    .then(r => r.json())
+    .then(d => document.getElementById('auctionId').innerText = 'Auction ID: ' + d.auction_id);
+}
+function placeBid() {
+    fetch(api + '/place_bid/' + document.getElementById('bidAuctionId').value, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            bidder: document.getElementById('bidder').value,
+            amount: parseFloat(document.getElementById('amount').value)
+        })
+    })
+    .then(r => r.json())
+    .then(d => document.getElementById('bidStatus').innerText = d.status || d.error);
+}
+function closeAuction() {
+    fetch(api + '/close_auction/' + document.getElementById('closeAuctionId').value, {
+        method: 'POST'
+    })
+    .then(r => r.json())
+    .then(d => document.getElementById('closeStatus').innerText = d.status || d.error);
+}
+function suggestBid() {
+    fetch(api + '/suggest_bid', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({item: document.getElementById('suggestItem').value})
+    })
+    .then(r => r.json())
+    .then(d => document.getElementById('suggestion').innerText = 'Suggested bid: $' + d.suggestion);
+}
+function revealWinner() {
+    fetch(api + '/reveal_winner/' + document.getElementById('revealAuctionId').value)
+    .then(r => r.json())
+    .then(d => {
+        if (d.winner && d.winner.bidder) {
+            document.getElementById('winner').innerText = 'Winner: ' + d.winner.bidder + ' ($' + d.winner.amount + ')';
+        } else {
+            document.getElementById('winner').innerText = 'No winner or no bids.';
+        }
+    });
+}
+</script>
+</body>
+</html>
